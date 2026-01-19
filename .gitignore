@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.env/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+*.tar.gz
+
+# Logs
+*.log
+logs/
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# dotenv secrets
+.env
+.env.*
+
+# Migrations (если используешь Alembic)
+alembic/versions/*.pyc
+alembic/versions/__pycache__/
+
+# FastAPI / Uvicorn
+*.db
+*.sqlite3
+
+# Pytest
+.cache/
+.pytest_cache/
