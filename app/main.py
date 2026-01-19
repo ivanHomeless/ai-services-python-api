@@ -1,23 +1,24 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from app.api.routes import router
+from dotenv import load_dotenv
+import os
 
-app = FastAPI(title="Voice API")
+# Загружаем переменные из .env
+load_dotenv()
+
+API_KEY = os.getenv("API_KEY")
+if not API_KEY:
+    raise RuntimeError("API_KEY is not set in environment")
+print(API_KEY)
+app = FastAPI(title="Di API")
+
+# Примитивная проверка ключа через middleware
+@app.middleware("http")
+async def check_api_key(request, call_next):
+    key = request.headers.get("x-api-key")
+    if key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    response = await call_next(request)
+    return response
 
 app.include_router(router)
-
-#
-# @app.get("/health")
-# def health_check():
-#     return {"status": "ok"}
-#
-#
-#
-# class TextRequest(BaseModel):
-#     text: str
-#
-# @app.post("/echo")
-# def echo(data: TextRequest):
-#     return {"result": data.text}
