@@ -1,14 +1,14 @@
 import os
 import uuid
 import asyncio
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.services.speech import transcribe_audio_with_chunks
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from app.services.speech import speech_to_text, text_to_speech
 
 router = APIRouter()
 TMP_DIR = "/tmp"
 
 @router.post("/speech-to-text")
-async def speech_to_text(file: UploadFile = File(...)):
+async def speech_to_text_endpoint(file: UploadFile = File(...)):
     if not file or file.filename == "":
         raise HTTPException(status_code=400, detail="No file uploaded")
 
@@ -23,7 +23,7 @@ async def speech_to_text(file: UploadFile = File(...)):
         f.write(contents)
 
     try:
-        text = await asyncio.to_thread(transcribe_audio_with_chunks, temp_filename)
+        text = await asyncio.to_thread(speech_to_text, temp_filename)
         return {
             "saved_as": temp_filename,
             "size_bytes": len(contents),
@@ -38,8 +38,15 @@ async def speech_to_text(file: UploadFile = File(...)):
             pass
 
 @router.post("/text-to-speech")
-async def text_to_speech_endpoint(text: str):
-    audio_bytes = await text_to_speech(text)
-    return {
-        "audio_base64": audio_bytes
-    }
+async def text_to_speech_endpoint(
+    text: str,
+    voice_name: str = Query("Oleg:master", description="Voice to use for TTS ")
+):
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is empty")
+    try:
+        # Передаём голос в функцию
+        audio_base64 = await text_to_speech(text, voice_name)
+        return {"audio_base64": audio_base64}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS error: {e}")

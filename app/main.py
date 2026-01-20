@@ -9,7 +9,6 @@ load_dotenv()
 API_KEY = os.getenv("API_KEY")
 if not API_KEY:
     raise RuntimeError("API_KEY is not set in environment")
-print(API_KEY)
 app = FastAPI(title="Di API")
 
 # Примитивная проверка ключа через middleware
