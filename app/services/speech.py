@@ -175,7 +175,7 @@ def save_wav(filename, audio_bytes, samplerate=16000):
 # ==== Синтез речи ====
 jwt_token = get_jwt()  # получаем токен один раз при старте
 
-def synthesize_speech(text: str, voice_name: str = "Oleg:master", filename="output.wav"):
+def synthesize_speech(text: str, voice_name: str = "Oleg:master"):
     global jwt_token
     payload = {
         "text": f"<speak>{text}</speak>",
@@ -192,7 +192,6 @@ def synthesize_speech(text: str, voice_name: str = "Oleg:master", filename="outp
 
     response = requests.post(key_data["endpoint_tts"], headers=headers, json=payload)
 
-    # если токен истёк — обновляем и повторяем один раз
     if response.status_code == 401:
         jwt_token = get_jwt()
         headers["X-Token"] = jwt_token
@@ -201,6 +200,5 @@ def synthesize_speech(text: str, voice_name: str = "Oleg:master", filename="outp
     if response.status_code != 200:
         raise Exception(f"TTS request failed: {response.status_code} {response.text}")
 
-    audio_data = response.content
-    save_wav(filename, audio_data)
-    print(f"Saved TTS to {filename}")
+    # ВОЗВРАЩАЕМ байты аудио
+    return response.content
