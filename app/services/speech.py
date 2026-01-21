@@ -4,8 +4,10 @@ import io
 import json
 import wave
 import base64
+import uuid
 import asyncio
 import requests
+import threading
 import speech_recognition as sr
 from pydub import AudioSegment
 from dotenv import load_dotenv
@@ -51,59 +53,45 @@ resp.raise_for_status()
 server_pub_b64 = resp.json()["public_key"]
 server_pub_der = base64.b64decode(server_pub_b64)
 server_public_key = RSA.importKey(server_pub_der)
+TMP_DIR = "/tmp"
 
 
-def speech_to_text(
-    file_path: str,
-    lang: str = "ru-RU",
-    chunk_length_ms: int = 30000
-) -> str:
-    # Определяем формат по расширению
+def speech_to_text(file_path: str, lang: str = "ru-RU", chunk_length_ms: int = 30000) -> str:
     ext = file_path.split(".")[-1].lower()
-    format_for_pydub = SUPPORTED_FORMATS.get(ext)
-    if not format_for_pydub:
-        raise ValueError(f"Unsupported audio format: {ext}")
+    format_pydub = SUPPORTED_FORMATS.get(ext, "wav")
 
-    wav_path = f"{file_path}.wav"
+    # Уникальный ID для этого конкретного запроса
+    request_id = uuid.uuid4()
+    wav_path = f"{TMP_DIR}/convert_{request_id}.wav"
 
     try:
-        # Конвертируем в WAV
-        audio_segment = AudioSegment.from_file(file_path, format=format_for_pydub)\
-                                   .set_channels(1)\
-                                   .set_frame_rate(16000)
-        audio_segment.export(wav_path, format="wav")
-    except Exception as e:
-        raise RuntimeError(f"Failed to convert audio to WAV: {e}")
+        audio = AudioSegment.from_file(file_path, format=format_pydub).set_channels(1).set_frame_rate(16000)
+        audio.export(wav_path, format="wav")
 
-    recognizer = sr.Recognizer()
-    audio = AudioSegment.from_wav(wav_path)
-    full_text = ""
+        recognizer = sr.Recognizer()
+        full_text = []
 
-    for i, start_ms in enumerate(range(0, len(audio), chunk_length_ms)):
-        chunk = audio[start_ms:start_ms + chunk_length_ms]
-        chunk_file = f"{wav_path}_{i}.wav"
+        # Читаем чанками
+        audio_src = AudioSegment.from_wav(wav_path)
+        for i, start_ms in enumerate(range(0, len(audio_src), chunk_length_ms)):
+            chunk = audio_src[start_ms:start_ms + chunk_length_ms]
+            chunk_name = f"{TMP_DIR}/chunk_{request_id}_{i}.wav"
 
-        try:
-            chunk.export(chunk_file, format="wav")
-            with sr.AudioFile(chunk_file) as source:
-                audio_data = recognizer.record(source)
             try:
-                part = recognizer.recognize_google(audio_data, language=lang)
-                full_text += " " + part
-            except sr.UnknownValueError:
-                full_text += " [неразборчиво] "
-            except sr.RequestError as e:
-                full_text += f" [ошибка сервиса: {e}] "
-        finally:
-            # Удаляем chunk файл
-            if os.path.exists(chunk_file):
-                os.remove(chunk_file)
+                chunk.export(chunk_name, format="wav")
+                with sr.AudioFile(chunk_name) as source:
+                    audio_data = recognizer.record(source)
+                # Вызываем метод (игнорируем предупреждение IDE)
+                text = recognizer.recognize_google(audio_data, language=lang)
+                full_text.append(text)
+            except Exception:
+                full_text.append("[...]")
+            finally:
+                if os.path.exists(chunk_name): os.remove(chunk_name)
 
-    # Удаляем WAV файл после обработки
-    if os.path.exists(wav_path):
-        os.remove(wav_path)
-
-    return full_text.strip()
+        return " ".join(full_text).strip()
+    finally:
+        if os.path.exists(wav_path): os.remove(wav_path)
 
 
 async def text_to_speech(text: str, voice_name: str = "Oleg:master"):
@@ -175,6 +163,7 @@ def save_wav(filename, audio_bytes, samplerate=16000):
 
 # ==== Синтез речи ====
 jwt_token = get_jwt()  # получаем токен один раз при старте
+token_lock = threading.Lock() # Создаем замок
 def synthesize_speech(text: str, voice_name: str = "Oleg:master"):
     global jwt_token
     payload = {
@@ -185,6 +174,9 @@ def synthesize_speech(text: str, voice_name: str = "Oleg:master"):
         "enable_normalization": True,
         "speed": 0.9
     }
+    with token_lock:
+        current_token = jwt_token
+
     headers = {
         "Content-Type": "application/json",
         "X-Token": jwt_token
@@ -193,8 +185,11 @@ def synthesize_speech(text: str, voice_name: str = "Oleg:master"):
     response = requests.post(key_data["endpoint_tts"], headers=headers, json=payload)
 
     if response.status_code == 401:
-        jwt_token = get_jwt()
-        headers["X-Token"] = jwt_token
+        with token_lock:
+            jwt_token = get_jwt()  # Обновляем глобально
+            current_token = jwt_token
+
+        headers["X-Token"] = current_token
         response = requests.post(key_data["endpoint_tts"], headers=headers, json=payload)
 
     if response.status_code != 200:
