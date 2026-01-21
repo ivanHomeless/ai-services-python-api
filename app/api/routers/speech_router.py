@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Header
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Header, Response
 from app.services.speech import speech_to_text, text_to_speech
 
 router = APIRouter()
@@ -57,19 +57,42 @@ async def speech_to_text_endpoint(
 # ----------------------------
 @router.post("/text-to-speech", summary="Синтез речи из текста")
 async def text_to_speech_endpoint(
-    text: str = Query(..., description="Текст для синтеза речи"),
-    voice_name: str = Query(
-        "Oleg:master",
-        description="Голос для синтеза. Возможные варианты: " + ", ".join(f"{k} ({v})" for k,v in VOICES.items())
-    ),
-    x_token: str = Header(..., description="JWT токен авторизации")
+        text: str = Query(..., description="Текст для синтеза речи"),
+        voice_name: str = Query("Oleg:master", description="Голос для синтеза"),
+        x_token: str = Header(..., description="JWT токен авторизации")
 ):
     if voice_name not in VOICES:
-        raise HTTPException(status_code=400, detail=f"Unsupported voice_name. Supported: {list(VOICES.keys())}")
+        raise HTTPException(status_code=400, detail=f"Unsupported voice_name.")
 
     try:
+        # Получаем байты из сервиса
         audio_bytes = await text_to_speech(text, voice_name)
-        import base64
-        return {"audio_base64": base64.b64encode(audio_bytes).decode(), "voice_used": voice_name}
+
+        # Отправляем как файл. n8n подхватит это как Binary Data
+        return Response(
+            content=audio_bytes,
+            media_type="audio/wav",
+            headers={"Content-Disposition": "attachment; filename=speech.wav"}
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"TTS error: {e}")
+        raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
+
+
+# @router.post("/text-to-speech", summary="Синтез речи из текста")
+# async def text_to_speech_endpoint(
+#     text: str = Query(..., description="Текст для синтеза речи"),
+#     voice_name: str = Query(
+#         "Oleg:master",
+#         description="Голос для синтеза. Возможные варианты: " + ", ".join(f"{k} ({v})" for k,v in VOICES.items())
+#     ),
+#     x_token: str = Header(..., description="JWT токен авторизации")
+# ):
+#     if voice_name not in VOICES:
+#         raise HTTPException(status_code=400, detail=f"Unsupported voice_name. Supported: {list(VOICES.keys())}")
+#
+#     try:
+#         audio_bytes = await text_to_speech(text, voice_name)
+#         import base64
+#         return {"audio_base64": base64.b64encode(audio_bytes).decode(), "voice_used": voice_name}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"TTS error: {e}")

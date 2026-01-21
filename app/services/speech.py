@@ -1,5 +1,6 @@
 
 import os
+import io
 import json
 import wave
 import base64
@@ -174,7 +175,6 @@ def save_wav(filename, audio_bytes, samplerate=16000):
 
 # ==== Синтез речи ====
 jwt_token = get_jwt()  # получаем токен один раз при старте
-
 def synthesize_speech(text: str, voice_name: str = "Oleg:master"):
     global jwt_token
     payload = {
@@ -198,7 +198,14 @@ def synthesize_speech(text: str, voice_name: str = "Oleg:master"):
         response = requests.post(key_data["endpoint_tts"], headers=headers, json=payload)
 
     if response.status_code != 200:
-        raise Exception(f"TTS request failed: {response.status_code} {response.text}")
+        raise Exception(f"TTS error: {response.status_code}")
 
-    # ВОЗВРАЩАЕМ байты аудио
-    return response.content
+    # Создаем WAV файл в оперативной памяти
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav_file:
+        wav_file.setnchannels(1)  # Моно
+        wav_file.setsampwidth(2)  # 16-bit
+        wav_file.setframerate(16000)  # Частота
+        wav_file.writeframes(response.content)
+
+    return buffer.getvalue()  # Возвращаем байты уже с заголовком WAV
