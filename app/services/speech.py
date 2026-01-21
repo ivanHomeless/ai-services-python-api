@@ -18,17 +18,29 @@ from Crypto.Signature import PKCS1_v1_5
 from Crypto.Hash import SHA
 from Crypto import Random
 
+# --- КОНСТАНТЫ ---
+TMP_DIR = "/tmp"
+DEFAULT_LANG = "ru-RU"
+CHUNK_LENGTH_MS = 30000
+SAMPLE_RATE = 16000
+CHANNELS = 1
 
-load_dotenv()
-
-# Словарь поддерживаемых форматов
 SUPPORTED_FORMATS = {
     "wav": "wav",
     "mp3": "mp3",
     "ogg": "ogg",
-    "oga": "ogg",  # oga — это Ogg контейнер с Opus
+    "oga": "ogg",
 }
-
+# Голоса
+VOICES = {
+    "Karina2:master": "Женский русский голос",
+    "Alex2:master": "Мужской русский голос",
+    "Anna:master": "Женский русский голос",
+    "Oleg:master": "Мужской русский голос",
+    "en_female:dev": "Женский английский голос",
+    "en_male:dev": "Мужской английский голос"
+}
+load_dotenv()
 # ==== Загружаем данные из .env ====
 key_data = {
     "organization_uuid": os.getenv("ORG_UUID"),
@@ -56,42 +68,74 @@ server_public_key = RSA.importKey(server_pub_der)
 TMP_DIR = "/tmp"
 
 
-def speech_to_text(file_path: str, lang: str = "ru-RU", chunk_length_ms: int = 30000) -> str:
+async def speech_to_text(file_bytes: bytes, original_filename: str, lang: str = "ru-RU") -> str:
+    """
+    Принимает байты файла, сохраняет во временное хранилище
+    и запускает процесс транскрибации.
+    """
+    ext = original_filename.split(".")[-1].lower()
+    request_id = uuid.uuid4()
+    # Создаем путь для временного сохранения входящих байтов
+    input_temp_path = f"{TMP_DIR}/input_{request_id}.{ext}"
+
+    try:
+        # Пишем байты в файл
+        with open(input_temp_path, "wb") as f:
+            f.write(file_bytes)
+
+        # Запускаем тяжелую логику в потоке, передавая ПУТЬ к файлу
+        return await asyncio.to_thread(transcribe_audio_with_chunks, input_temp_path, lang, request_id)
+
+    finally:
+        # Гарантированно удаляем входной временный файл
+        if os.path.exists(input_temp_path):
+            os.remove(input_temp_path)
+
+
+def transcribe_audio_with_chunks(file_path: str, lang: str, request_id: uuid.UUID) -> str:
+    """
+    Внутренняя логика обработки файла (конвертация + нарезка + распознавание).
+    """
     ext = file_path.split(".")[-1].lower()
     format_pydub = SUPPORTED_FORMATS.get(ext, "wav")
-
-    # Уникальный ID для этого конкретного запроса
-    request_id = uuid.uuid4()
     wav_path = f"{TMP_DIR}/convert_{request_id}.wav"
 
     try:
+        # Конвертируем исходный файл в нужный формат WAV
         audio = AudioSegment.from_file(file_path, format=format_pydub).set_channels(1).set_frame_rate(16000)
         audio.export(wav_path, format="wav")
 
         recognizer = sr.Recognizer()
         full_text = []
 
-        # Читаем чанками
+        # Загружаем сконвертированный WAV для нарезки
         audio_src = AudioSegment.from_wav(wav_path)
-        for i, start_ms in enumerate(range(0, len(audio_src), chunk_length_ms)):
-            chunk = audio_src[start_ms:start_ms + chunk_length_ms]
+
+        for i, start_ms in enumerate(range(0, len(audio_src), CHUNK_LENGTH_MS)):
+            chunk = audio_src[start_ms:start_ms + CHUNK_LENGTH_MS]
             chunk_name = f"{TMP_DIR}/chunk_{request_id}_{i}.wav"
 
             try:
                 chunk.export(chunk_name, format="wav")
                 with sr.AudioFile(chunk_name) as source:
                     audio_data = recognizer.record(source)
-                # Вызываем метод (игнорируем предупреждение IDE)
+
+                # Распознавание через Google (игнорируем предупреждение атрибута)
                 text = recognizer.recognize_google(audio_data, language=lang)
                 full_text.append(text)
-            except Exception:
+            except (sr.UnknownValueError, Exception):
+                # Если фрагмент не распознан или ошибка — ставим метку
                 full_text.append("[...]")
             finally:
-                if os.path.exists(chunk_name): os.remove(chunk_name)
+                if os.path.exists(chunk_name):
+                    os.remove(chunk_name)
 
         return " ".join(full_text).strip()
+
     finally:
-        if os.path.exists(wav_path): os.remove(wav_path)
+        # Удаляем основной рабочий WAV файл
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
 
 
 async def text_to_speech(text: str, voice_name: str = "Oleg:master"):
