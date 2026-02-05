@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Header, HTTPException, Depends
-from fastapi.security.api_key import APIKeyHeader, APIKey
-from app.api.routers import speech_router
+from fastapi.security.api_key import APIKeyHeader
+from app.api.routers import speech_router, image_router
 from dotenv import load_dotenv
 import os
 
@@ -31,4 +31,12 @@ app.include_router(
     prefix="/api",
     dependencies=[Depends(get_api_key)],  # все эндпоинты требуют API Key
     tags=["Speech"]
+)
+
+# Роутер изображений
+app.include_router(
+    image_router.router,
+    prefix="/api/image",
+    dependencies=[Depends(get_api_key)], # Та же защита
+    tags=["Image Generation"]
 )
