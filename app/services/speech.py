@@ -1,14 +1,16 @@
-
 import os
 import io
 import json
 import wave
+import time
 import base64
 import uuid
 import asyncio
+import edge_tts
 import requests
 import threading
 import speech_recognition as sr
+
 from pydub import AudioSegment
 from dotenv import load_dotenv
 
@@ -17,6 +19,8 @@ from Crypto.Cipher import PKCS1_OAEP, AES
 from Crypto.Signature import PKCS1_v1_5
 from Crypto.Hash import SHA
 from Crypto import Random
+
+
 
 # --- КОНСТАНТЫ ---
 TMP_DIR = "/tmp"
@@ -138,6 +142,22 @@ def transcribe_audio_with_chunks(file_path: str, lang: str, request_id: uuid.UUI
             os.remove(wav_path)
 
 
+async def text_to_speech_edge(text: str, voice: str = "ru-RU-DmitryNeural") -> str:
+    """
+    Генерирует речь через Microsoft Edge TTS.
+    Здесь цикл не нужен, API отвечает мгновенно.
+    """
+    try:
+        communicate = edge_tts.Communicate(text, voice)
+        output_path = f"temp_tts_{int(time.time())}.mp3"
+        await communicate.save(output_path)
+        return output_path
+    except Exception as e:
+        # Если Microsoft недоступен, пробрасываем ошибку сразу
+        raise RuntimeError(f"EdgeTTS failed: {e}")
+
+
+# Neuro Временно отключено
 async def text_to_speech(text: str, voice_name: str = "Oleg:master"):
     audio_bytes = await asyncio.to_thread(synthesize_speech, text, voice_name)
     return audio_bytes
@@ -206,10 +226,12 @@ def save_wav(filename, audio_bytes, samplerate=16000):
         wav_file.writeframes(audio_bytes)
 
 # ==== Синтез речи ====
-jwt_token = get_jwt()  # получаем токен один раз при старте
-token_lock = threading.Lock() # Создаем замок
+#jwt_token = get_jwt()  # получаем токен один раз при старте
+#token_lock = threading.Lock() # Создаем замок
 def synthesize_speech(text: str, voice_name: str = "Oleg:master"):
-    global jwt_token
+    #global jwt_token
+    jwt_token = get_jwt() # переместить в глобальный
+    token_lock = threading.Lock()  # Создаем замок, переместить в глобальный
     payload = {
         "text": f"<speak>{text}</speak>",
         "samplerate": 16000,

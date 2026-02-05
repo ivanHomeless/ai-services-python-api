@@ -1,6 +1,9 @@
+import os
+
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Header, Response
-from app.services.speech import speech_to_text, text_to_speech
-from app.services.speech import VOICES
+
+from app.services.speech import speech_to_text
+from app.services.audio_ai import text_to_speech_edge
 
 router = APIRouter()
 
@@ -33,29 +36,35 @@ async def speech_to_text_endpoint(
         # Любая ошибка внутри сервиса вернется сюда
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
+
 # ----------------------------
-# Text-to-Speech
+# Text-to-Speech (Edge TTS)
 # ----------------------------
-@router.post("/text-to-speech", summary="Синтез речи из текста")
+@router.post("/text-to-speech", summary="Синтез речи (Edge TTS - High Quality)")
 async def text_to_speech_endpoint(
-        text: str = Query(..., description="Текст для синтеза речи"),
-        voice_name: str = Query("Oleg:master", description=f"Доступные: {', '.join(VOICES.keys())}"),
-        x_token: str = Header(..., description="JWT токен авторизации")
+        text: str = Query(..., description="Текст для озвучки"),
+        voice: str = Query("ru-RU-DmitryNeural", description="ru-RU-DmitryNeural или ru-RU-SvetlanaNeural"),
+        x_token: str = Header(..., description="API Key")
 ):
-    if voice_name not in VOICES:
-        raise HTTPException(status_code=400, detail=f"Unsupported voice_name.")
-
     try:
-        # Получаем байты из сервиса
-        audio_bytes = await text_to_speech(text, voice_name)
+        # Edge TTS - это асинхронная библиотека, await работает нативно
+        # Генерируем файл
+        output_path = await text_to_speech_edge(text, voice)
 
-        # Отправляем как файл. n8n подхватит это как Binary Data
+        # Читаем его в память
+        with open(output_path, "rb") as f:
+            audio_bytes = f.read()
+
+        # Удаляем файл с диска
+        os.remove(output_path)
+
+        # Отдаем как файл
         return Response(
             content=audio_bytes,
-            media_type="audio/wav",
-            headers={"Content-Disposition": "attachment; filename=speech.wav"}
+            media_type="audio/mpeg",  # Edge TTS выдает mp3
+            headers={"Content-Disposition": "attachment; filename=voice.mp3"}
         )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
-
 
