@@ -43,28 +43,39 @@ async def speech_to_text_endpoint(
 @router.post("/text-to-speech", summary="Синтез речи (Edge TTS - High Quality)")
 async def text_to_speech_endpoint(
         text: str = Query(..., description="Текст для озвучки"),
+        filename: str = Query("audio.mp3", description="Имя файла для Telegram"),
         voice: str = Query("ru-RU-DmitryNeural", description="ru-RU-DmitryNeural или ru-RU-SvetlanaNeural"),
         x_token: str = Header(..., description="API Key")
 ):
+    temp_path = None
     try:
-        # Edge TTS - это асинхронная библиотека, await работает нативно
-        # Генерируем файл
-        output_path = await text_to_speech_edge(text, voice)
+        # 1. Генерируем файл (сервис вернет путь к temp_....mp3)
+        temp_path = await text_to_speech_edge(text, voice)
 
-        # Читаем его в память
-        with open(output_path, "rb") as f:
+        # 2. Читаем байты в оперативную память
+        with open(temp_path, "rb") as f:
             audio_bytes = f.read()
 
-        # Удаляем файл с диска
-        os.remove(output_path)
+        # 3. УДАЛЯЕМ временный файл (Clean up)
+        # Мы уже считали байты, файл на диске больше не нужен
+        os.remove(temp_path)
+        temp_path = None
 
-        # Отдаем как файл
+        # 4. Проверяем, есть ли .mp3 в конце имени, если нет - добавляем
+        if not filename.endswith(".mp3"):
+            filename += ".mp3"
+
+        # 5. Отдаем ответ с правильным заголовком
+        # Именно здесь задается то имя, которое увидит Telegram!
         return Response(
             content=audio_bytes,
-            media_type="audio/mpeg",  # Edge TTS выдает mp3
-            headers={"Content-Disposition": "attachment; filename=voice.mp3"}
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
 
     except Exception as e:
+        # Если упала ошибка, но файл успел создаться - удаляем его, чтобы не мусорить
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
 
