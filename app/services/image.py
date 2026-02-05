@@ -1,8 +1,9 @@
 import os
 import time
-import shutil
+
 from gradio_client import Client
-from fastapi import HTTPException
+from gradio_client.utils import TooManyRequestsError
+
 
 # Настройки
 SPACE_URL = "https://playgroundai-playground-v2-5.hf.space/"
@@ -12,14 +13,18 @@ RETRY_DELAY = 10  # Пауза между попытками
 
 def generate_image_sync(prompt: str, negative_prompt: str, width: int, height: int) -> bytes:
     """
-    Синхронная функция генерации.
-    FastAPI запустит её в отдельном потоке, чтобы не блокировать сервер.
+    Синхронная функция генерации с авторизацией по токену.
     """
     start_time = time.time()
     attempt = 1
 
-    # Временное имя файла для сохранения результата gradio
-    temp_filename = f"temp_{int(time.time())}.png"
+    # 1. Получаем токен из .env (HF_TOKEN или API_KEY)
+    hf_token = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+
+    # 2. Формируем заголовки авторизации (для gradio_client 2.0+)
+    headers = None
+    if hf_token and hf_token.startswith("hf_"):
+        headers = {"Authorization": f"Bearer {hf_token}"}
 
     print(f"[Image Gen] Start: {prompt[:50]}...")
 
@@ -29,10 +34,10 @@ def generate_image_sync(prompt: str, negative_prompt: str, width: int, height: i
             raise TimeoutError("Превышено время ожидания генерации")
 
         try:
-            # Пересоздаем клиент каждый раз для надежности соединения
-            client = Client(SPACE_URL)
+            # 3. Подключаемся, передавая заголовки с токеном
+            client = Client(SPACE_URL, headers=headers)
 
-            # Параметры конкретно для Playground v2.5
+            # Параметры Playground v2.5
             result = client.predict(
                 prompt,  # prompt
                 negative_prompt,  # negative_prompt
@@ -40,19 +45,18 @@ def generate_image_sync(prompt: str, negative_prompt: str, width: int, height: i
                 0,  # seed
                 width,  # width
                 height,  # height
-                3,  # guidance_scale
+                3,  # guidance_scale (Жестко задано 3, как в твоем коде)
                 True,  # randomize_seed
                 api_name="/run"
             )
 
-            # Разбор ответа (Gallery format)
+            # Разбор ответа
             image_path = None
             if result and isinstance(result, (list, tuple)):
                 try:
-                    # Пытаемся достать путь (обычно result[0][0]['image'])
+                    # Обычно это result[0][0]['image']
                     image_path = result[0][0]['image']
                 except (KeyError, IndexError, TypeError):
-                    # Запасной вариант
                     if isinstance(result[0], str):
                         image_path = result[0]
 
@@ -61,7 +65,7 @@ def generate_image_sync(prompt: str, negative_prompt: str, width: int, height: i
                 with open(image_path, "rb") as img_file:
                     image_bytes = img_file.read()
 
-                # Удаляем временный файл, который создал Gradio
+                # Удаляем временный файл
                 try:
                     os.remove(image_path)
                 except:
@@ -70,9 +74,13 @@ def generate_image_sync(prompt: str, negative_prompt: str, width: int, height: i
                 print(f"[Image Gen] Success on attempt {attempt}")
                 return image_bytes
 
+        # 4. Ловим ошибку перегрузки (429)
+        except TooManyRequestsError:
+            print(f"⚠️ [Image Gen] Server is busy (429). Cooling down for 30s...")
+            time.sleep(30)  # Ждем дольше обычного
+
         except Exception as e:
             print(f"[Image Gen] Attempt {attempt} failed: {e}. Retrying...")
+            time.sleep(RETRY_DELAY)
 
-        # Ждем перед следующей попыткой
-        time.sleep(RETRY_DELAY)
         attempt += 1
