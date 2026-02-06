@@ -2,7 +2,9 @@ from typing import List
 from .base import ImageProvider
 from .huggingface import HuggingFaceProvider
 from .pixazo import PixazoProvider
-from .z_image import ZImageProvider  # <--- 1. ИМПОРТИРУЕМ НОВЫЙ КЛАСС
+from .z_image import ZImageProvider
+from .flux_klein import FluxKleinProvider
+from .qwen import QwenProvider
 
 
 def generate_image_sync(
@@ -13,9 +15,11 @@ def generate_image_sync(
 ) -> bytes:
     # --- 2. ДОБАВЛЯЕМ В СПИСОК ---
     providers: List[ImageProvider] = [
-        HuggingFaceProvider(),  # 1. Playground v2.5 (Топ качество)
-        ZImageProvider(),  # 2. Z-Image (Новый! Хорошая альтернатива)
-        PixazoProvider()  # 3. Pixazo (Flux) - Надежный резерв
+        HuggingFaceProvider(),  # 1. Playground v2.5
+        FluxKleinProvider(),    # 2. Flux.1 Klein
+        QwenProvider(),         # 3. Qwen Image
+        ZImageProvider(),       # 4. Z-Image
+        PixazoProvider()       # 5. Pixazo (Failover)
     ]
 
     errors = []
