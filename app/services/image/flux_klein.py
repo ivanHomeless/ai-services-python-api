@@ -1,7 +1,11 @@
 import os
+import logging
+
 from gradio_client import Client
 from .base import ImageProvider
 
+# Инициализируем логгер для этого файла
+logger = logging.getLogger(__name__)
 
 class FluxKleinProvider(ImageProvider):
     def __init__(self):
@@ -15,25 +19,21 @@ class FluxKleinProvider(ImageProvider):
 
     def generate(self, prompt: str, negative_prompt: str, width: int, height: int) -> bytes:
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else None
-
-        # Инициализация
         client = Client(self.space_id, headers=headers)
 
-        # Вызов API согласно твоим логам
-        # predict(prompt, input_images, mode_choice, seed, randomize_seed, width, height, steps, guidance, upsampling, api_name)
-        result = client.predict(
-            prompt,  # prompt
-            [],  # input_images (пустой список, мы генерируем с нуля)
-            "Distilled (4 steps)",  # mode_choice (Выбираем быстрый режим)
-            0,  # seed
-            True,  # randomize_seed
-            width,  # width
-            height,  # height
-            4,  # num_inference_steps (совпадает с режимом Distilled)
-            3.5,  # guidance_scale (стандарт для Flux обычно 3.5, хотя дефолт 1.0)
-            False,  # prompt_upsampling (пока выключим, чтобы промпт не искажался)
+        logger.info(f"⏳ [Flux] Submitting job (Timeout: 30s)...")
+
+        # Используем submit + timeout
+        job = client.submit(
+            prompt, [], "Distilled (4 steps)", 0, True, width, height, 4, 3.5, False,
             api_name="/generate"
         )
+
+        try:
+            # Flux быстрый, 30 секунд ему за глаза. Если дольше - значит очередь.
+            result = job.result(timeout=30)
+        except Exception:
+            raise TimeoutError("Flux Queue timeout (30s limit)")
 
         # --- Разбор ответа ---
         # Лог говорит: Returns (result: dict, seed: float)

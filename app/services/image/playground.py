@@ -1,9 +1,13 @@
 import os
+import logging
+
 from gradio_client import Client
-from .base import ImageProvider  # Импортируем наш интерфейс
+from .base import ImageProvider
 
+# Инициализируем логгер для этого файла
+logger = logging.getLogger(__name__)
 
-class HuggingFaceProvider(ImageProvider):
+class PlaygroundProvider(ImageProvider):
     def __init__(self):
         self.token = os.getenv("HF_TOKEN")
         self.url = os.getenv("HF_URL", "https://playgroundai-playground-v2-5.hf.space/")
@@ -14,18 +18,26 @@ class HuggingFaceProvider(ImageProvider):
 
     def generate(self, prompt: str, negative_prompt: str, width: int, height: int) -> bytes:
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else None
-
-        # Создаем клиента
         client = Client(self.url, headers=headers)
 
-        # Один запрос (Strategy: Fail Fast)
-        result = client.predict(
+        # Логируем начало
+        logger.info(f"⏳ [Playground] Submitting job (Timeout: 45s)...")
+
+        job = client.submit(
             prompt, negative_prompt, True, 0, width, height, 3, True,
             api_name="/run"
         )
 
+        try:
+            # Ждем результат ровно 45 секунд
+            result = job.result(timeout=45)
+        except Exception as e:
+            # Если время вышло, отменяем задание, чтобы не грузить сервер зря
+            # (метод cancel есть у job, но в блоке except лучше просто кинуть ошибку)
+            raise TimeoutError(f"Too slow! Queue is long. ({str(e)})")
+
+        # Дальше парсинг тот же самый...
         image_path = None
-        # Пытаемся распарсить разные форматы ответа Gradio
         if isinstance(result, (list, tuple)):
             try:
                 if isinstance(result[0], list) and isinstance(result[0][0], dict):

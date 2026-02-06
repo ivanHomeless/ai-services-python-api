@@ -1,7 +1,10 @@
 import os
+import logging
 from gradio_client import Client
 from .base import ImageProvider
 
+# Инициализируем логгер для этого файла
+logger = logging.getLogger(__name__)
 
 class QwenProvider(ImageProvider):
     def __init__(self):
@@ -40,23 +43,20 @@ class QwenProvider(ImageProvider):
 
         # Определяем соотношение
         ar_string = self._get_aspect_ratio(width, height)
-        print(f"📐 [Qwen] Size {width}x{height} -> Aspect Ratio '{ar_string}'")
+        logger.info(f"📐 [Qwen] Size {width}x{height} -> Aspect Ratio '{ar_string}'")
 
         client = Client(self.space_id, headers=headers)
 
-        # Вызов API по твоему логу:
-        # predict(prompt, seed, randomize_seed, aspect_ratio, guidance, steps, enhance, api_name)
-        result = client.predict(
-            prompt,  # prompt
-            0,  # seed
-            True,  # randomize_seed
-            ar_string,  # aspect_ratio (строка!)
-            4.0,  # guidance_scale
-            50,  # num_inference_steps (Qwen любит побольше шагов)
-            True,  # prompt_enhance (пусть Qwen сам улучшает промпт, он это умеет)
+        job = client.submit(
+            prompt, 0, True, ar_string, 4.0, 50, True,
             api_name="/infer"
         )
 
+        try:
+            # Qwen медленный, дадим ему 60 секунд
+            result = job.result(timeout=60)
+        except Exception:
+            raise TimeoutError("Qwen Queue timeout (60s limit)")
         # --- Разбор ответа ---
         # Returns: (result, seed)
         # result: dict(path: str, url: str, ...)

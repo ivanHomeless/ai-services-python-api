@@ -1,7 +1,10 @@
 import os
+import logging
 from gradio_client import Client
 from .base import ImageProvider
 
+# Инициализируем логгер для этого файла
+logger = logging.getLogger(__name__)
 
 class ZImageProvider(ImageProvider):
     def __init__(self):
@@ -27,11 +30,29 @@ class ZImageProvider(ImageProvider):
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else None
         client = Client(self.space_id, headers=headers)
 
-        # Вызываем API
-        result = client.predict(
-            prompt, negative_prompt, resolution_str, 0, 30, 4.0, False, True, [],
-            api_name="/generate"
-        )
+        logger.info(f"⏳ [Z-Image] Submitting job (Timeout: 45s)...")
+
+        try:
+            # 1. Отправляем задачу в очередь
+            job = client.submit(
+                prompt,  # prompt
+                negative_prompt,  # negative_prompt
+                resolution_str,  # resolution
+                0,  # seed
+                30,  # steps
+                4.0,  # guidance
+                False,  # cfg_norm
+                True,  # random_seed
+                [],  # gallery
+                api_name="/generate"
+            )
+
+            # 2. Ждем 45 секунд
+            result = job.result(timeout=45)
+
+        except Exception as e:
+            logger.warning(f"⚠️ [Z-Image] Timeout or Error: {e}")
+            raise TimeoutError(f"Z-Image failed/timeout: {e}")
 
         # --- ИСПРАВЛЕННЫЙ ПАРСИНГ ---
         image_path = None

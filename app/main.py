@@ -1,8 +1,34 @@
+import os
+import logging
+
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.security.api_key import APIKeyHeader
 from app.api.routers import speech_router, image_router
 from dotenv import load_dotenv
-import os
+
+# --- 0. ПОДГОТОВКА ПАПОК ---
+# Создаем папку logs автоматически, чтобы не было ошибки FileNotFoundError
+os.makedirs("logs", exist_ok=True)
+
+# --- 1. НАСТРОЙКА ЛОГИРОВАНИЯ ---
+log_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+
+# Пишем теперь ВНУТРЬ папки logs
+file_handler = logging.FileHandler("logs/providers.log", mode="a", encoding="utf-8")
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[file_handler, console_handler]
+)
+
+logger = logging.getLogger(__name__)
+
 
 # Загружаем переменные из .env
 load_dotenv()
@@ -40,3 +66,5 @@ app.include_router(
     dependencies=[Depends(get_api_key)], # Та же защита
     tags=["Image Generation"]
 )
+
+logger.info("Application started! Logs directory is ready.")
