@@ -1,86 +1,69 @@
 import os
-import time
 
-from gradio_client import Client
-from gradio_client.utils import TooManyRequestsError
+import requests
+import random
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Твой ключ от Pixazo
+API_KEY_PIXAZO = os.getenv('API_KEY_PIXAZO')
+URL = "https://gateway.pixazo.ai/flux-1-schnell/v1/getData"
 
 
-# Настройки
-SPACE_URL = "https://playgroundai-playground-v2-5.hf.space/"
-MAX_WAIT_TIME = 600  # 10 минут ожидания (для n8n хватит)
-RETRY_DELAY = 10  # Пауза между попытками
+def generate_image_sync(
+        prompt: str,
+        negative_prompt: str,  # Оставляем аргумент, чтобы роутер не ругался (но Flux его не использует)
+        width: int = 1024,
+        height: int = 680
+) -> bytes:
+    print(f"[Pixazo Flux] Start: {prompt[:50]}...")
 
+    headers = {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Ocp-Apim-Subscription-Key": API_KEY_PIXAZO
+    }
 
-def generate_image_sync(prompt: str, negative_prompt: str, width: int, height: int) -> bytes:
-    """
-    Синхронная функция генерации с авторизацией по токену.
-    """
-    start_time = time.time()
-    attempt = 1
+    # Параметры запроса
+    data = {
+        "prompt": prompt,
+        "num_steps": 4,  # Оптимально для Flux Schnell
+        "seed": random.randint(1, 9999999),  # Случайное зерно, чтобы картинки были разными
+        "height": height,
+        "width": width
+    }
 
-    # 1. Получаем токен из .env (HF_TOKEN или API_KEY)
-    hf_token = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+    try:
+        # --- ШАГ 1: Получаем ссылку на картинку ---
+        response = requests.post(URL, json=data, headers=headers, timeout=60)
 
-    # 2. Формируем заголовки авторизации (для gradio_client 2.0+)
-    headers = None
-    if hf_token and hf_token.startswith("hf_"):
-        headers = {"Authorization": f"Bearer {hf_token}"}
+        if response.status_code != 200:
+            raise Exception(f"API Error: {response.text}")
 
-    print(f"[Image Gen] Start: {prompt[:50]}...")
+        result = response.json()
 
-    while True:
-        elapsed = time.time() - start_time
-        if elapsed > MAX_WAIT_TIME:
-            raise TimeoutError("Превышено время ожидания генерации")
+        # Вот тут исправление под твой лог:
+        # Ответ сервера: {'output': 'https://...'}
+        image_url = result.get('output')
 
-        try:
-            # 3. Подключаемся, передавая заголовки с токеном
-            client = Client(SPACE_URL, headers=headers)
+        if not image_url:
+            raise ValueError(f"Сервер не вернул ссылку. Ответ: {result}")
 
-            # Параметры Playground v2.5
-            result = client.predict(
-                prompt,  # prompt
-                negative_prompt,  # negative_prompt
-                True,  # use_negative_prompt
-                0,  # seed
-                width,  # width
-                height,  # height
-                3,  # guidance_scale (Жестко задано 3, как в твоем коде)
-                True,  # randomize_seed
-                api_name="/run"
-            )
+        print(f"[Pixazo] URL received: {image_url}")
 
-            # Разбор ответа
-            image_path = None
-            if result and isinstance(result, (list, tuple)):
-                try:
-                    # Обычно это result[0][0]['image']
-                    image_path = result[0][0]['image']
-                except (KeyError, IndexError, TypeError):
-                    if isinstance(result[0], str):
-                        image_path = result[0]
+        # --- ШАГ 2: Скачиваем саму картинку ---
+        # n8n нужен файл, а не ссылка, поэтому скачиваем её здесь
+        img_response = requests.get(image_url)
 
-            if image_path and os.path.exists(image_path):
-                # Читаем файл в память
-                with open(image_path, "rb") as img_file:
-                    image_bytes = img_file.read()
+        if img_response.status_code == 200:
+            print("[Pixazo] Image downloaded successfully!")
+            return img_response.content  # Возвращаем байты
+        else:
+            raise Exception(f"Не удалось скачать файл по ссылке. Code: {img_response.status_code}")
 
-                # Удаляем временный файл
-                try:
-                    os.remove(image_path)
-                except:
-                    pass
-
-                print(f"[Image Gen] Success on attempt {attempt}")
-                return image_bytes
-
-        # 4. Ловим ошибку перегрузки (429)
-        except TooManyRequestsError:
-            print(f"⚠️ [Image Gen] Server is busy (429). Cooling down for 30s...")
-            time.sleep(30)  # Ждем дольше обычного
-
-        except Exception as e:
-            print(f"[Image Gen] Attempt {attempt} failed: {e}. Retrying...")
-            time.sleep(RETRY_DELAY)
-
-        attempt += 1
+    except Exception as e:
+        print(f"❌ Pixazo Error: {e}")
+        # Прокидываем ошибку выше, чтобы роутер выдал 500
+        raise e

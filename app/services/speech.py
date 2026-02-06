@@ -20,7 +20,7 @@ from Crypto.Signature import PKCS1_v1_5
 from Crypto.Hash import SHA
 from Crypto import Random
 
-
+load_dotenv()
 
 # --- КОНСТАНТЫ ---
 TMP_DIR = "/tmp"
@@ -44,7 +44,6 @@ VOICES = {
     "en_female:dev": "Женский английский голос",
     "en_male:dev": "Мужской английский голос"
 }
-load_dotenv()
 # ==== Загружаем данные из .env ====
 key_data = {
     "organization_uuid": os.getenv("ORG_UUID"),

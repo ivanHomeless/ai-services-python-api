@@ -14,8 +14,8 @@ missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck
 async def generate_image_endpoint(
     prompt: str = Query(..., description="Описание изображения на английском"),
     negative_prompt: str = Query(CREEPY_NEGATIVE_PROMPT, description="Чего не должно быть"),
-    width: int = Query(1024, ge=256, le=1536),
-    height: int = Query(1024, ge=256, le=1536),
+    width: int = Query(1024, ge=256, le=2048, description="Ширина"),
+    height: int = Query(680, ge=256, le=2048, description="Высота (3:2)"),
     x_token: str = Header(..., description="API Key") # Оставляем для явности в Swagger, хотя main.py проверяет
 ):
     try:
