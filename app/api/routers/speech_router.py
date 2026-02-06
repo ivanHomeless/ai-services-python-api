@@ -3,10 +3,7 @@ import os
 from urllib.parse import quote
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Header, Response
 
-from app.services.speech import speech_to_text
-from app.services.audio_ai import text_to_speech_edge
-
-
+from app.services.speech import speech_to_text, text_to_speech_edge
 
 router = APIRouter()
 
