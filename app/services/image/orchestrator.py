@@ -1,10 +1,10 @@
 import logging
 import time
-from typing import List, Dict
+from typing import List, Dict, Type
 from .base import ImageProvider
 
 # Импортируем все провайдеры
-from .playground import PlaygroundProvider  # Переименовали класс? Если нет, оставь HuggingFaceProvider
+from .playground import PlaygroundProvider
 from .flux_klein import FluxKleinProvider
 from .qwen import QwenProvider
 from .z_image_kieai import ZImageKieAIProvider
@@ -12,43 +12,37 @@ from .radames import RadamesProvider
 from .pixazo import PixazoProvider
 from .leonardo import LeonardoProvider
 
-# Настраиваем логгер для этого файла
 logger = logging.getLogger(__name__)
 
-# Приглушаем httpx логи (heartbeat 404 и прочий шум от Gradio Client)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Провайдеры, которые никогда не банятся (всегда в ротации)
-NEVER_BLACKLIST = {PixazoProvider}
+NEVER_BLACKLIST: set[Type[ImageProvider]] = {PixazoProvider}
 
-# Blacklist: provider_class -> timestamp когда упал
+# Blacklist: класс провайдера -> timestamp когда упал
 # Провайдер исключается на 24 часа после первой ошибки
-_blacklist: Dict[type, float] = {}
-_BLACKLIST_TTL = 24 * 60 * 60  # 24 часа в секундах
+_blacklist: Dict[Type[ImageProvider], float] = {}
+_BLACKLIST_TTL = 24 * 60 * 60  # секунд
 
 
-def _is_blacklisted(provider: ImageProvider) -> bool:
-    cls = type(provider)
+def _is_blacklisted(cls: Type[ImageProvider]) -> bool:
     if cls in NEVER_BLACKLIST:
         return False
     banned_at = _blacklist.get(cls)
     if banned_at is None:
         return False
     if time.time() - banned_at >= _BLACKLIST_TTL:
-        # TTL истёк — снимаем бан
         del _blacklist[cls]
-        logger.info(f"🔓 [Orchestrator] {provider.name} unbanned after 24h cooldown")
+        logger.info(f"🔓 [Orchestrator] {cls.__name__} unbanned after 24h cooldown")
         return False
     return True
 
 
-def _ban(provider: ImageProvider) -> None:
-    cls = type(provider)
+def _ban(cls: Type[ImageProvider]) -> None:
     if cls in NEVER_BLACKLIST:
         return
     _blacklist[cls] = time.time()
-    hours = _BLACKLIST_TTL / 3600
-    logger.warning(f"🚫 [Orchestrator] {provider.name} banned for {hours:.0f}h")
+    logger.warning(f"🚫 [Orchestrator] {cls.__name__} banned for {_BLACKLIST_TTL // 3600}h")
 
 
 def generate_image_sync(
@@ -64,27 +58,28 @@ def generate_image_sync(
     # 3. LeonardoAI (универсальный)
     # 4. В самом конце - платный/стабильный (Pixazo) — никогда не банится
 
-    all_providers: List[ImageProvider] = [
-        PlaygroundProvider(),  # 1. Топ качество (45 сек)
-        FluxKleinProvider(),  # 2. Быстрый и крутой (30 сек)
-        LeonardoProvider(),    # 3. Leonardo AI (GPT-1.5 / Nano / SeeDream)
-        #QwenProvider(),  # 4. Умный, понимает сцены (60 сек)
-        ZImageKieAIProvider(),  # 5. Z-Image via kie.ai (120 сек таймаут)
-        #RadamesProvider(),  # 6. Спидстер SDXL Lightning (15 сек)
-        PixazoProvider()  # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает, не банится)
+    all_providers: List[Type[ImageProvider]] = [
+        PlaygroundProvider,    # 1. Топ качество (45 сек)
+        FluxKleinProvider,     # 2. Быстрый и крутой (30 сек)
+        #LeonardoProvider,      # 3. Leonardo AI (GPT-1.5 / Nano / SeeDream)
+        # QwenProvider,        # 4. Умный, понимает сцены (60 сек)
+        #ZImageKieAIProvider,   # 5. Z-Image via kie.ai (120 сек таймаут)
+        # RadamesProvider,     # 6. Спидстер SDXL Lightning (15 сек)
+        PixazoProvider,        # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает, не банится)
     ]
 
-    providers = [p for p in all_providers if not _is_blacklisted(p)]
+    active = [cls for cls in all_providers if not _is_blacklisted(cls)]
 
-    skipped = len(all_providers) - len(providers)
+    skipped = len(all_providers) - len(active)
     logger.info(f"🎬 [Orchestrator] New Request: '{prompt[:40]}...' Size: {width}x{height} "
-                f"| Active: {len(providers)}/{len(all_providers)} providers"
+                f"| Active: {len(active)}/{len(all_providers)} providers"
                 + (f" ({skipped} blacklisted)" if skipped else ""))
 
     errors = []
 
-    for i, provider in enumerate(providers, 1):
-        logger.info(f"🔄 [Orchestrator] Step {i}/{len(providers)}: Launching >>> {provider.name} <<<")
+    for i, cls in enumerate(active, 1):
+        provider = cls()
+        logger.info(f"🔄 [Orchestrator] Step {i}/{len(active)}: Launching >>> {provider.name} <<<")
 
         try:
             result = provider.generate(prompt, negative_prompt, width, height)
@@ -97,15 +92,13 @@ def generate_image_sync(
             if "quota" in err_msg.lower() or "429" in err_msg:
                 logger.warning(f"[Orchestrator] {provider.name} hit QUOTA/LIMIT. Moving next...")
             elif "timeout" in err_msg.lower():
-                logger.warning(f"[Orchestrator] {provider.name} TIMED OUT (Queue too long). Moving next...")
+                logger.warning(f"[Orchestrator] {provider.name} TIMED OUT. Moving next...")
             else:
                 logger.error(f"[Orchestrator] {provider.name} FAILED: {err_msg}")
 
-            _ban(provider)
+            _ban(cls)
             errors.append(f"{provider.name}: {err_msg}")
-            continue
 
-    # Если цикл закончился, а мы здесь — значит упал даже Pixazo
     final_error = f"ALL PROVIDERS DEAD. Details: {'; '.join(errors)}"
     logger.critical(final_error)
     raise Exception(final_error)
