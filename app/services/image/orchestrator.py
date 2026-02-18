@@ -38,7 +38,7 @@ def generate_image_sync(
         #QwenProvider(),  # 4. Умный, понимает сцены (60 сек)
         #ZImageProvider(),  # 5. Тяжелый, но качественный (45 сек)
         #RadamesProvider(),  # 6. Спидстер SDXL Lightning (15 сек)
-        #PixazoProvider()  # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает)
+        PixazoProvider()  # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает)
     ]
 
     errors = []

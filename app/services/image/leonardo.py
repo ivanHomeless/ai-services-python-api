@@ -171,13 +171,17 @@ class LeonardoProvider(ImageProvider):
                         logger.error(f"❌ [Leonardo] Status COMPLETE but no images found.")
                         raise ValueError("Leonardo generation failed (no images)")
                 elif status == 'FAILED':
-                     logger.error(f"❌ [Leonardo] Generation FAILED.")
-                     raise ValueError("Leonardo generation status: FAILED")
-                
+                    logger.error(f"❌ [Leonardo] Generation FAILED.")
+                    raise ValueError("Leonardo generation status: FAILED")
+
                 time.sleep(2)
 
-            except Exception as e:
-                logger.warning(f"⚠️ [Leonardo] Polling exception: {e}")
+            except (ValueError, Exception) as e:
+                # ValueError = фатальная логическая ошибка (FAILED, нет изображений) — пробрасываем
+                if isinstance(e, ValueError):
+                    raise
+                # Остальное (сеть, timeout запроса) — временная ошибка, продолжаем поллинг
+                logger.warning(f"⚠️ [Leonardo] Polling transient error: {e}")
                 time.sleep(2)
 
         if not image_url:
