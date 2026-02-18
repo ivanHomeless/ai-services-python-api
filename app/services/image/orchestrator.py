@@ -9,6 +9,7 @@ from .qwen import QwenProvider
 from .z_image import ZImageProvider
 from .radames import RadamesProvider
 from .pixazo import PixazoProvider
+from .leonardo import LeonardoProvider
 
 # Настраиваем логгер для этого файла
 logger = logging.getLogger(__name__)
@@ -27,15 +28,17 @@ def generate_image_sync(
     # === СТРАТЕГИЯ ===
     # 1. Сначала пробуем самые крутые бесплатные (Playground, Flux, Qwen)
     # 2. Потом пробуем быстрые/CPU (Radames Lightning)
-    # 3. В самом конце - платный/стабильный (Pixazo)
+    # 3. LeonardoAI (универсальный)
+    # 4. В самом конце - платный/стабильный (Pixazo)
 
     providers: List[ImageProvider] = [
-        PlaygroundProvider(),  # 1. Топ качество (45 сек)
-        FluxKleinProvider(),  # 2. Быстрый и крутой (30 сек)
-        QwenProvider(),  # 3. Умный, понимает сцены (60 сек)
-        ZImageProvider(),  # 4. Тяжелый, но качественный (45 сек)
-        RadamesProvider(),  # 5. Спидстер SDXL Lightning (15 сек)
-        PixazoProvider()  # 6. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает)
+        #PlaygroundProvider(),  # 1. Топ качество (45 сек)
+        #FluxKleinProvider(),  # 2. Быстрый и крутой (30 сек)
+        LeonardoProvider(),    # 3. Leonardo AI (GPT-1.5 / Nano / SeeDream)
+        #QwenProvider(),  # 4. Умный, понимает сцены (60 сек)
+        #ZImageProvider(),  # 5. Тяжелый, но качественный (45 сек)
+        #RadamesProvider(),  # 6. Спидстер SDXL Lightning (15 сек)
+        #PixazoProvider()  # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает)
     ]
 
     errors = []
