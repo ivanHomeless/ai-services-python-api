@@ -61,9 +61,9 @@ def generate_image_sync(
     all_providers: List[Type[ImageProvider]] = [
         PlaygroundProvider,    # 1. Топ качество (45 сек)
         FluxKleinProvider,     # 2. Быстрый и крутой (30 сек)
-        #LeonardoProvider,      # 3. Leonardo AI (GPT-1.5 / Nano / SeeDream)
+        LeonardoProvider,      # 3. Leonardo AI (GPT-1.5 / Nano / SeeDream)
         # QwenProvider,        # 4. Умный, понимает сцены (60 сек)
-        #ZImageKieAIProvider,   # 5. Z-Image via kie.ai (120 сек таймаут)
+        ZImageKieAIProvider,   # 5. Z-Image via kie.ai (120 сек таймаут)
         # RadamesProvider,     # 6. Спидстер SDXL Lightning (15 сек)
         PixazoProvider,        # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает, не банится)
     ]
