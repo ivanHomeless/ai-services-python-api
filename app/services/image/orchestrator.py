@@ -31,11 +31,11 @@ def generate_image_sync(
 
     providers: List[ImageProvider] = [
         PlaygroundProvider(),  # 1. Топ качество (45 сек)
-        #FluxKleinProvider(),  # 2. Быстрый и крутой (30 сек)
-        #QwenProvider(),  # 3. Умный, понимает сцены (60 сек)
-        #ZImageProvider(),  # 4. Тяжелый, но качественный (45 сек)
-        #RadamesProvider(),  # 5. Спидстер SDXL Lightning (15 сек)
-        #PixazoProvider()  # 6. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает)
+        FluxKleinProvider(),  # 2. Быстрый и крутой (30 сек)
+        QwenProvider(),  # 3. Умный, понимает сцены (60 сек)
+        ZImageProvider(),  # 4. Тяжелый, но качественный (45 сек)
+        RadamesProvider(),  # 5. Спидстер SDXL Lightning (15 сек)
+        PixazoProvider()  # 6. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает)
     ]
 
     errors = []
