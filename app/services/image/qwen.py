@@ -39,53 +39,64 @@ class QwenProvider(ImageProvider):
             return '3:4'
 
     def generate(self, prompt: str, negative_prompt: str, width: int, height: int) -> bytes:
+        logger.info(f"🎯 [Qwen] Starting generation. Prompt: '{prompt[:50]}...', Size: {width}x{height}")
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else None
+        logger.debug(f"🔑 [Qwen] Token present: {bool(self.token)}, Space: {self.space_id}")
 
-        # Определяем соотношение
         ar_string = self._get_aspect_ratio(width, height)
         logger.info(f"📐 [Qwen] Size {width}x{height} -> Aspect Ratio '{ar_string}'")
 
         client = Client(self.space_id, headers=headers)
 
-        job = client.submit(
-            prompt, 0, True, ar_string, 4.0, 50, True,
-            api_name="/infer"
-        )
-
         try:
-            # Qwen медленный, дадим ему 60 секунд
-            result = job.result(timeout=60)
-        except Exception:
-            raise TimeoutError("Qwen Queue timeout (60s limit)")
-        # --- Разбор ответа ---
-        # Returns: (result, seed)
-        # result: dict(path: str, url: str, ...)
+            logger.info(f"⏳ [Qwen] Submitting job (Timeout: 60s)...")
+            job = client.submit(
+                prompt, 0, True, ar_string, 4.0, 50, True,
+                api_name="/infer"
+            )
+            logger.debug(f"📤 [Qwen] Job submitted, waiting for result...")
 
-        image_path = None
-        try:
-            # Gradio возвращает кортеж, первый элемент - результат
-            output_obj = result[0]
-
-            # Это может быть путь-строка или словарь
-            if isinstance(output_obj, str):
-                image_path = output_obj
-            elif isinstance(output_obj, dict):
-                if 'path' in output_obj:
-                    image_path = output_obj['path']
-                elif 'url' in output_obj:
-                    # Некоторые версии возвращают url вместо пути
-                    image_path = output_obj['url']
-
-        except Exception as e:
-            print(f"⚠️ Ошибка парсинга Qwen: {e}")
-
-        if image_path and os.path.exists(image_path):
-            with open(image_path, "rb") as img_file:
-                image_bytes = img_file.read()
             try:
-                os.remove(image_path)
-            except:
-                pass
-            return image_bytes
+                result = job.result(timeout=60)
+                logger.info(f"✅ [Qwen] Job result received. Type: {type(result).__name__}, Value: {result}")
+            except Exception as e:
+                logger.warning(f"⚠️ [Qwen] Timeout: {e}")
+                raise TimeoutError("Qwen Queue timeout (60s limit)")
 
-        raise ValueError(f"Qwen не вернул файл. Ответ: {result}")
+            image_path = None
+            try:
+                output_obj = result[0]
+                logger.debug(f"📦 [Qwen] output_obj type: {type(output_obj).__name__}, content: {output_obj}")
+
+                if isinstance(output_obj, str):
+                    image_path = output_obj
+                    logger.debug(f"📦 [Qwen] Parsed string, image_path: {image_path}")
+                elif isinstance(output_obj, dict):
+                    if 'path' in output_obj:
+                        image_path = output_obj['path']
+                    elif 'url' in output_obj:
+                        image_path = output_obj['url']
+                    logger.debug(f"📦 [Qwen] Parsed dict, image_path: {image_path}")
+
+            except Exception as e:
+                logger.warning(f"⚠️ [Qwen] Parse error: {e}")
+
+            logger.debug(f"📂 [Qwen] Resolved image_path: {image_path}")
+
+            if image_path and os.path.exists(image_path):
+                logger.info(f"📖 [Qwen] Reading file: {image_path}")
+                with open(image_path, "rb") as img_file:
+                    image_bytes = img_file.read()
+                logger.info(f"✅ [Qwen] File read OK. Size: {len(image_bytes)} bytes")
+                try:
+                    os.remove(image_path)
+                    logger.debug(f"🗑️ [Qwen] Temp file deleted: {image_path}")
+                except:
+                    pass
+                return image_bytes
+
+            logger.error(f"❌ [Qwen] Image path not found or doesn't exist. Path: {image_path}")
+            raise ValueError(f"Qwen не вернул файл. Ответ: {result}")
+        finally:
+            client.close()
+            logger.debug(f"🔌 [Qwen] Client closed")

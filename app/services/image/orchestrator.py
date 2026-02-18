@@ -13,6 +13,9 @@ from .pixazo import PixazoProvider
 # Настраиваем логгер для этого файла
 logger = logging.getLogger(__name__)
 
+# Приглушаем httpx логи (heartbeat 404 и прочий шум от Gradio Client)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 def generate_image_sync(
         prompt: str,
@@ -27,11 +30,11 @@ def generate_image_sync(
     # 3. В самом конце - платный/стабильный (Pixazo)
 
     providers: List[ImageProvider] = [
-        #PlaygroundProvider(),  # 1. Топ качество (45 сек)
+        PlaygroundProvider(),  # 1. Топ качество (45 сек)
         #FluxKleinProvider(),  # 2. Быстрый и крутой (30 сек)
         #QwenProvider(),  # 3. Умный, понимает сцены (60 сек)
         #ZImageProvider(),  # 4. Тяжелый, но качественный (45 сек)
-        RadamesProvider(),  # 5. Спидстер SDXL Lightning (15 сек)
+        #RadamesProvider(),  # 5. Спидстер SDXL Lightning (15 сек)
         #PixazoProvider()  # 6. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает)
     ]
 
