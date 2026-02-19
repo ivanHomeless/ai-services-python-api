@@ -59,13 +59,12 @@ def generate_image_sync(
     # 4. В самом конце - платный/стабильный (Pixazo) — никогда не банится
 
     all_providers: List[Type[ImageProvider]] = [
-        PlaygroundProvider,    # 1. Топ качество (45 сек)
-        FluxKleinProvider,     # 2. Быстрый и крутой (30 сек)
-        LeonardoProvider,      # 3. Leonardo AI (GPT-1.5 / Nano / SeeDream)
-        # QwenProvider,        # 4. Умный, понимает сцены (60 сек)
-        ZImageKieAIProvider,   # 5. Z-Image via kie.ai (120 сек таймаут)
-        # RadamesProvider,     # 6. Спидстер SDXL Lightning (15 сек)
-        PixazoProvider,        # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает, не банится)
+        #PlaygroundProvider,    # 1. Топ качество (45 сек)
+        #FluxKleinProvider,     # 2. Быстрый и крутой (30 сек)
+        #LeonardoProvider,      # 3. Leonardo AI (GPT-1.5 / Nano / SeeDream)
+        #QwenProvider,        # 4. Умный, понимает сцены (60 сек)
+        #ZImageKieAIProvider,   # 5. Z-Image via kie.ai (120 сек таймаут)        
+        #PixazoProvider,        # 7. ПОСЛЕДНИЙ РУБЕЖ (Всегда работает, не банится)
     ]
 
     active = [cls for cls in all_providers if not _is_blacklisted(cls)]
