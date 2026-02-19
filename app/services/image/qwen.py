@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class QwenProvider(ImageProvider):
     def __init__(self):
-        self.space_id = "Qwen/Qwen-Image-2512"
+        self.space_id = "https://qwen-qwen-image-2512.hf.space"
         self.token = os.getenv("HF_TOKEN")
 
     @property
